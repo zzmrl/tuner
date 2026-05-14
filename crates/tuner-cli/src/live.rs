@@ -1,16 +1,22 @@
-//! Live mic capture via cpal: stream samples into a shared buffer, run the
-//! detector on the main thread, print to stdout.
+//! Live mic capture via cpal, driving `tuner-engine`.
+//!
+//! The engine is moved into the cpal callback (single audio-thread owner).
+//! The handle stays on the main thread and is polled at the display rate.
 
 use anyhow::{Context, Result, anyhow};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, StreamConfig};
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tuner_core::{DetectorConfig, McLeodDetector};
+use tuner_core::DetectorConfig;
+use tuner_engine::{EngineConfig, TunerEngine};
 
 use crate::print_frame;
 
-pub fn run(cfg: DetectorConfig, hop: usize) -> Result<()> {
+/// How often the UI polls the handle. 30 Hz is the usual "feels live" threshold;
+/// faster doesn't help when the analysis hop is what limits new data.
+const DISPLAY_HZ: f32 = 30.0;
+
+pub fn run(detector: DetectorConfig, hop: usize) -> Result<()> {
     let host = cpal::default_host();
     let device = host
         .default_input_device()
@@ -28,100 +34,111 @@ pub fn run(cfg: DetectorConfig, hop: usize) -> Result<()> {
         device
             .description()
             .as_ref()
-            .map(|desc| desc.name())
+            .map(|d| d.name())
             .unwrap_or("?"),
         sample_rate / 1000.0,
         channels,
         sample_format,
-        cfg.window_len,
+        detector.window_len,
         hop,
     );
 
-    let buffer: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::with_capacity(cfg.window_len * 4)));
+    let engine_cfg = EngineConfig {
+        detector,
+        sample_rate,
+        hop,
+        smoother: tuner_engine::SmootherConfig::default(),
+    };
+    let (engine, mut handle) = TunerEngine::new(engine_cfg);
     let err_fn = |e| eprintln!("stream error: {e}");
 
-    let stream = {
-        let buf = buffer.clone();
-        match sample_format {
-            SampleFormat::F32 => device.build_input_stream(
-                &stream_cfg,
-                move |data: &[f32], _| push(&buf, data, channels),
-                err_fn,
-                None,
-            ),
-            SampleFormat::I16 => device.build_input_stream(
-                &stream_cfg,
-                move |data: &[i16], _| {
-                    let f: Vec<f32> = data.iter().map(|&s| s as f32 / i16::MAX as f32).collect();
-                    push(&buf, &f, channels);
-                },
-                err_fn,
-                None,
-            ),
-            SampleFormat::U16 => device.build_input_stream(
-                &stream_cfg,
-                move |data: &[u16], _| {
-                    let f: Vec<f32> = data
-                        .iter()
-                        .map(|&s| (s as f32 - 32768.0) / 32768.0)
-                        .collect();
-                    push(&buf, &f, channels);
-                },
-                err_fn,
-                None,
-            ),
-            other => return Err(anyhow!("unsupported sample format: {other:?}")),
-        }
-        .context("build_input_stream")?
-    };
+    let stream = build_stream(
+        &device,
+        &stream_cfg,
+        sample_format,
+        channels,
+        engine,
+        err_fn,
+    )?;
     stream.play().context("stream.play")?;
 
-    // Main loop: drain the buffer in hop-sized chunks, run the detector, print.
-    let mut det = McLeodDetector::new(cfg.clone());
-    let mut window = vec![0.0_f32; cfg.window_len];
-    let start = Instant::now();
-
-    // Wait for the first full window's worth of samples to accumulate.
     eprintln!("listening… (Ctrl-C to stop)");
-
+    let start = Instant::now();
+    let tick = Duration::from_secs_f32(1.0 / DISPLAY_HZ);
     loop {
-        // Drain new samples into a local scratch.
-        let new = {
-            let mut guard = buffer.lock().unwrap();
-            std::mem::take(&mut *guard)
-        };
-        if new.is_empty() {
-            std::thread::sleep(Duration::from_millis(5));
-            continue;
-        }
-        // Slide-window via the existing `window` buffer: shift left, append.
-        // (Cheap for hop sizes we care about; if it gets hot, swap for a ring.)
-        if new.len() >= window.len() {
-            // Took more than one window — keep the most recent.
-            let start_idx = new.len() - window.len();
-            window.copy_from_slice(&new[start_idx..]);
-        } else {
-            let keep = window.len() - new.len();
-            window.copy_within(new.len().., 0);
-            window[keep..].copy_from_slice(&new);
-        }
-        let pitch = det.detect(&window, sample_rate);
+        let pitch = handle.latest();
         print_frame(start.elapsed().as_secs_f64(), pitch);
-
-        // Sleep approximately one hop's worth so we don't busy-loop.
-        std::thread::sleep(Duration::from_secs_f32(hop as f32 / sample_rate));
+        std::thread::sleep(tick);
     }
 }
 
-/// Mono-downmix and append into the shared buffer.
-fn push(buf: &Arc<Mutex<Vec<f32>>>, data: &[f32], channels: usize) {
-    let mut guard = buf.lock().unwrap();
+fn build_stream(
+    device: &cpal::Device,
+    stream_cfg: &StreamConfig,
+    sample_format: SampleFormat,
+    channels: usize,
+    mut engine: TunerEngine,
+    err_fn: impl FnMut(cpal::StreamError) + Send + 'static,
+) -> Result<cpal::Stream> {
+    let mut scratch: Vec<f32> = Vec::with_capacity(2048);
+
+    let stream = match sample_format {
+        SampleFormat::F32 => device.build_input_stream(
+            stream_cfg,
+            move |data: &[f32], _| {
+                feed(&mut engine, data, channels, &mut scratch, |s| s);
+            },
+            err_fn,
+            None,
+        ),
+        SampleFormat::I16 => device.build_input_stream(
+            stream_cfg,
+            move |data: &[i16], _| {
+                feed(&mut engine, data, channels, &mut scratch, |s| {
+                    s as f32 / i16::MAX as f32
+                });
+            },
+            err_fn,
+            None,
+        ),
+        SampleFormat::U16 => device.build_input_stream(
+            stream_cfg,
+            move |data: &[u16], _| {
+                feed(&mut engine, data, channels, &mut scratch, |s| {
+                    (s as f32 - 32768.0) / 32768.0
+                });
+            },
+            err_fn,
+            None,
+        ),
+        other => return Err(anyhow!("unsupported sample format: {other:?}")),
+    }
+    .context("build_input_stream")?;
+    Ok(stream)
+}
+
+/// Convert + mono-downmix + push into the engine. No allocation per call after
+/// the first one that grows `scratch`.
+fn feed<S: Copy>(
+    engine: &mut TunerEngine,
+    data: &[S],
+    channels: usize,
+    scratch: &mut Vec<f32>,
+    convert: impl Fn(S) -> f32,
+) {
+    let frames = data.len() / channels.max(1);
+    scratch.clear();
+    if frames > scratch.capacity() {
+        scratch.reserve(frames - scratch.capacity());
+    }
     if channels <= 1 {
-        guard.extend_from_slice(data);
+        scratch.extend(data.iter().copied().map(&convert));
     } else {
         let inv = 1.0 / channels as f32;
         for frame in data.chunks_exact(channels) {
-            guard.push(frame.iter().sum::<f32>() * inv);
+            let sum: f32 = frame.iter().copied().map(&convert).sum();
+            scratch.push(sum * inv);
         }
     }
+    engine.process(scratch);
 }

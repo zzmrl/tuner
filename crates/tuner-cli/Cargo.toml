@@ -9,6 +9,7 @@ description = "Validation CLI for tuner-core: analyse WAV files or live mic inpu
 
 [dependencies]
 tuner-core = { path = "../tuner-core" }
+tuner-engine = { path = "../tuner-engine" }
 hound.workspace = true
 clap.workspace = true
 anyhow.workspace = true
