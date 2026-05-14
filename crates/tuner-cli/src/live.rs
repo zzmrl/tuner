@@ -25,7 +25,11 @@ pub fn run(cfg: DetectorConfig, hop: usize) -> Result<()> {
 
     eprintln!(
         "tuner-cli live: {} — {:.1} kHz, {} ch, format {:?}, window={} hop={}",
-        device.name().unwrap_or_else(|_| "?".into()),
+        device
+            .description()
+            .as_ref()
+            .map(|desc| desc.name())
+            .unwrap_or("?"),
         sample_rate / 1000.0,
         channels,
         sample_format,
