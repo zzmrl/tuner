@@ -8,14 +8,16 @@
 //!
 //! Autocorrelation is computed via FFT in O(N log N).
 
+use std::sync::Arc;
+
 use realfft::num_complex::Complex32;
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 
 pub struct NsdfWorkspace {
     n: usize,
     fft_len: usize,
-    forward: std::sync::Arc<dyn RealToComplex<f32>>,
-    inverse: std::sync::Arc<dyn ComplexToReal<f32>>,
+    forward: Arc<dyn RealToComplex<f32>>,
+    inverse: Arc<dyn ComplexToReal<f32>>,
     time_buf: Vec<f32>,
     freq_buf: Vec<Complex32>,
 }
