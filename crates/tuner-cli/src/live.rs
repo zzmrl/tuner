@@ -8,7 +8,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, StreamConfig};
 use std::time::{Duration, Instant};
 use tuner_core::DetectorConfig;
-use tuner_engine::{EngineConfig, TunerEngine};
+use tuner_engine::{EngineConfig, SmootherConfig, TunerEngine};
 
 use crate::print_frame;
 
@@ -47,7 +47,7 @@ pub fn run(detector: DetectorConfig, hop: usize) -> Result<()> {
         detector,
         sample_rate,
         hop,
-        smoother: tuner_engine::SmootherConfig::default(),
+        smoother: SmootherConfig::default(),
     };
     let (engine, mut handle) = TunerEngine::new(engine_cfg);
     let err_fn = |e| eprintln!("stream error: {e}");
