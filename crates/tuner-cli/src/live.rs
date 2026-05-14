@@ -1,7 +1,7 @@
 //! Live mic capture via cpal: stream samples into a shared buffer, run the
 //! detector on the main thread, print to stdout.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, StreamConfig};
 use std::sync::{Arc, Mutex};
@@ -12,11 +12,13 @@ use crate::print_frame;
 
 pub fn run(cfg: DetectorConfig, hop: usize) -> Result<()> {
     let host = cpal::default_host();
-    let device = host.default_input_device()
+    let device = host
+        .default_input_device()
         .ok_or_else(|| anyhow!("no default input device"))?;
-    let supported = device.default_input_config()
+    let supported = device
+        .default_input_config()
         .context("default input config")?;
-    let sample_rate = supported.sample_rate().0 as f32;
+    let sample_rate = supported.sample_rate() as f32;
     let channels = supported.channels() as usize;
     let sample_format = supported.sample_format();
     let stream_cfg: StreamConfig = supported.into();
@@ -24,7 +26,11 @@ pub fn run(cfg: DetectorConfig, hop: usize) -> Result<()> {
     eprintln!(
         "tuner-cli live: {} — {:.1} kHz, {} ch, format {:?}, window={} hop={}",
         device.name().unwrap_or_else(|_| "?".into()),
-        sample_rate / 1000.0, channels, sample_format, cfg.window_len, hop,
+        sample_rate / 1000.0,
+        channels,
+        sample_format,
+        cfg.window_len,
+        hop,
     );
 
     let buffer: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::with_capacity(cfg.window_len * 4)));
@@ -36,7 +42,8 @@ pub fn run(cfg: DetectorConfig, hop: usize) -> Result<()> {
             SampleFormat::F32 => device.build_input_stream(
                 &stream_cfg,
                 move |data: &[f32], _| push(&buf, data, channels),
-                err_fn, None,
+                err_fn,
+                None,
             ),
             SampleFormat::I16 => device.build_input_stream(
                 &stream_cfg,
@@ -44,19 +51,24 @@ pub fn run(cfg: DetectorConfig, hop: usize) -> Result<()> {
                     let f: Vec<f32> = data.iter().map(|&s| s as f32 / i16::MAX as f32).collect();
                     push(&buf, &f, channels);
                 },
-                err_fn, None,
+                err_fn,
+                None,
             ),
             SampleFormat::U16 => device.build_input_stream(
                 &stream_cfg,
                 move |data: &[u16], _| {
-                    let f: Vec<f32> = data.iter()
-                        .map(|&s| (s as f32 - 32768.0) / 32768.0).collect();
+                    let f: Vec<f32> = data
+                        .iter()
+                        .map(|&s| (s as f32 - 32768.0) / 32768.0)
+                        .collect();
                     push(&buf, &f, channels);
                 },
-                err_fn, None,
+                err_fn,
+                None,
             ),
             other => return Err(anyhow!("unsupported sample format: {other:?}")),
-        }.context("build_input_stream")?
+        }
+        .context("build_input_stream")?
     };
     stream.play().context("stream.play")?;
 

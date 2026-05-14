@@ -48,7 +48,9 @@ impl McLeodDetector {
         Self { cfg, ws, nsdf }
     }
 
-    pub fn config(&self) -> &DetectorConfig { &self.cfg }
+    pub fn config(&self) -> &DetectorConfig {
+        &self.cfg
+    }
 
     /// Detect pitch from a window of exactly `cfg.window_len` samples.
     pub fn detect(&mut self, samples: &[f32], sample_rate: f32) -> Option<Pitch> {
@@ -60,21 +62,31 @@ impl McLeodDetector {
         let min_tau = (sample_rate / self.cfg.max_hz).floor() as usize;
         let max_tau = (sample_rate / self.cfg.min_hz).ceil() as usize;
         let max_tau = max_tau.min(self.nsdf.len() - 2);
-        if min_tau < 2 || min_tau >= max_tau { return None; }
+        if min_tau < 2 || min_tau >= max_tau {
+            return None;
+        }
 
         // 1. Skip past the initial positive lobe (NSDF starts at 1.0 and descends).
         //    Find first zero-crossing from positive → negative.
         let mut tau = min_tau.max(1);
-        while tau < max_tau && self.nsdf[tau] > 0.0 { tau += 1; }
-        if tau >= max_tau { return None; }
+        while tau < max_tau && self.nsdf[tau] > 0.0 {
+            tau += 1;
+        }
+        if tau >= max_tau {
+            return None;
+        }
 
         // 2. Collect key maxima: in each region between zero-crossings, take
         //    the highest local max.
         let mut peaks: Vec<(usize, f32)> = Vec::new();
         while tau < max_tau {
             // Advance to next positive region.
-            while tau < max_tau && self.nsdf[tau] <= 0.0 { tau += 1; }
-            if tau >= max_tau { break; }
+            while tau < max_tau && self.nsdf[tau] <= 0.0 {
+                tau += 1;
+            }
+            if tau >= max_tau {
+                break;
+            }
             // Track the max within this positive region.
             let mut local_tau = tau;
             let mut local_val = self.nsdf[tau];
@@ -87,28 +99,44 @@ impl McLeodDetector {
             }
             peaks.push((local_tau, local_val));
         }
-        if peaks.is_empty() { return None; }
+        if peaks.is_empty() {
+            return None;
+        }
 
         // 3. Pick the *first* peak that exceeds `peak_threshold * global_max`.
         let global_max = peaks.iter().map(|p| p.1).fold(0.0_f32, f32::max);
         let threshold = self.cfg.peak_threshold * global_max;
-        let (chosen_tau, _) = peaks.iter()
+        let (chosen_tau, _) = peaks
+            .iter()
             .copied()
             .find(|&(_, v)| v >= threshold)
             .unwrap_or_else(|| {
                 // Fallback: highest peak overall.
-                peaks.iter().copied().fold(peaks[0], |acc, p| if p.1 > acc.1 { p } else { acc })
+                peaks
+                    .iter()
+                    .copied()
+                    .fold(peaks[0], |acc, p| if p.1 > acc.1 { p } else { acc })
             });
 
         // 4. Parabolic interpolation around the chosen lag for sub-sample accuracy.
         let (refined_tau, refined_val) = parabolic_interp(&self.nsdf, chosen_tau);
-        if refined_val < self.cfg.min_confidence { return None; }
-        if refined_tau <= 0.0 { return None; }
+        if refined_val < self.cfg.min_confidence {
+            return None;
+        }
+        if refined_tau <= 0.0 {
+            return None;
+        }
 
         let hz = sample_rate / refined_tau;
-        if hz < self.cfg.min_hz || hz > self.cfg.max_hz { return None; }
+        if hz < self.cfg.min_hz || hz > self.cfg.max_hz {
+            return None;
+        }
 
-        Some(Pitch::from_hz(hz, refined_val.clamp(0.0, 1.0), self.cfg.a4_hz))
+        Some(Pitch::from_hz(
+            hz,
+            refined_val.clamp(0.0, 1.0),
+            self.cfg.a4_hz,
+        ))
     }
 }
 
@@ -142,20 +170,28 @@ mod tests {
 
     fn synth_sawtooth(hz: f32, sr: f32, n: usize) -> Vec<f32> {
         // Crude band-limited-ish saw via additive synthesis (5 harmonics).
-        (0..n).map(|i| {
-            let t = i as f32 / sr;
-            let mut s = 0.0;
-            for k in 1..=5 {
-                s += (TAU * hz * k as f32 * t).sin() / k as f32;
-            }
-            s * 0.4
-        }).collect()
+        (0..n)
+            .map(|i| {
+                let t = i as f32 / sr;
+                let mut s = 0.0;
+                for k in 1..=5 {
+                    s += (TAU * hz * k as f32 * t).sin() / k as f32;
+                }
+                s * 0.4
+            })
+            .collect()
     }
 
     fn assert_close(detected: f32, expected: f32, cents_tol: f32) {
         let cents = 1200.0 * (detected / expected).log2();
-        assert!(cents.abs() < cents_tol,
-            "detected={} expected={} ({:.2} cents off, tol={})", detected, expected, cents, cents_tol);
+        assert!(
+            cents.abs() < cents_tol,
+            "detected={} expected={} ({:.2} cents off, tol={})",
+            detected,
+            expected,
+            cents,
+            cents_tol
+        );
     }
 
     #[test]
@@ -180,7 +216,10 @@ mod tests {
     fn detects_low_b_bass() {
         // 5-string bass low B — the stress test.
         let sr = 48000.0;
-        let cfg = DetectorConfig { window_len: 8192, ..Default::default() };
+        let cfg = DetectorConfig {
+            window_len: 8192,
+            ..Default::default()
+        };
         let mut det = McLeodDetector::new(cfg);
         let sig = synth_sawtooth(30.868, sr, 8192);
         let p = det.detect(&sig, sr).expect("voiced");

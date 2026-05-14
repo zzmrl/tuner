@@ -8,8 +8,8 @@
 //!
 //! Autocorrelation is computed via FFT in O(N log N).
 
-use realfft::{RealFftPlanner, RealToComplex, ComplexToReal};
 use realfft::num_complex::Complex32;
+use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 
 pub struct NsdfWorkspace {
     n: usize,
@@ -45,8 +45,12 @@ impl NsdfWorkspace {
 
         // 1. Zero-padded forward FFT.
         self.time_buf[..self.n].copy_from_slice(samples);
-        for v in &mut self.time_buf[self.n..] { *v = 0.0; }
-        self.forward.process(&mut self.time_buf, &mut self.freq_buf).unwrap();
+        for v in &mut self.time_buf[self.n..] {
+            *v = 0.0;
+        }
+        self.forward
+            .process(&mut self.time_buf, &mut self.freq_buf)
+            .unwrap();
 
         // 2. Power spectrum.
         for c in &mut self.freq_buf {
@@ -57,7 +61,9 @@ impl NsdfWorkspace {
         }
 
         // 3. Inverse FFT → autocorrelation r(τ) (unnormalized).
-        self.inverse.process(&mut self.freq_buf, &mut self.time_buf).unwrap();
+        self.inverse
+            .process(&mut self.freq_buf, &mut self.time_buf)
+            .unwrap();
         // realfft's inverse leaves an implicit scale of `fft_len`; we divide
         // numerator and denominator by the same factor in NSDF, so we can skip it.
 
@@ -89,7 +95,9 @@ impl NsdfWorkspace {
             let lo = samples[tau] as f64;
             let hi = samples[self.n - 1 - tau] as f64;
             m_tau -= lo * lo + hi * hi;
-            if m_tau < 0.0 { m_tau = 0.0; }
+            if m_tau < 0.0 {
+                m_tau = 0.0;
+            }
         }
     }
 }
@@ -104,7 +112,9 @@ mod tests {
     fn nsdf_at_zero_is_one() {
         let n = 1024;
         let mut ws = NsdfWorkspace::new(n);
-        let sig: Vec<f32> = (0..n).map(|i| (TAU * 110.0 * i as f32 / 48000.0).sin()).collect();
+        let sig: Vec<f32> = (0..n)
+            .map(|i| (TAU * 110.0 * i as f32 / 48000.0).sin())
+            .collect();
         let mut out = vec![0.0; n];
         ws.compute(&sig, &mut out);
         assert!((out[0] - 1.0).abs() < 0.01, "NSDF(0) = {}", out[0]);
@@ -125,7 +135,9 @@ mod tests {
         // Search window around the expected lag.
         let lo = expected_tau.saturating_sub(5);
         let hi = (expected_tau + 5).min(n - 1);
-        let (peak_tau, &peak_val) = out[lo..=hi].iter().enumerate()
+        let (peak_tau, &peak_val) = out[lo..=hi]
+            .iter()
+            .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
             .unwrap();
         assert!(peak_val > 0.9, "peak={} at offset {}", peak_val, peak_tau);

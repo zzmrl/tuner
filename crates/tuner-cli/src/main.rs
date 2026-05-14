@@ -54,7 +54,7 @@ fn main() -> Result<()> {
     };
     match cli.cmd {
         Cmd::File { path } => wav::run(&path, cfg, cli.hop),
-        Cmd::Live          => live::run(cfg, cli.hop),
+        Cmd::Live => live::run(cfg, cli.hop),
     }
 }
 
@@ -68,4 +68,3 @@ pub(crate) fn print_frame(t_seconds: f64, pitch: Option<Pitch>) {
         None => println!("{:>8.3}s  --", t_seconds),
     }
 }
-

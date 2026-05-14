@@ -5,32 +5,53 @@ use core::fmt;
 /// The twelve pitch classes in 12-tone equal temperament.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoteName {
-    C, Cs, D, Ds, E, F, Fs, G, Gs, A, As, B,
+    C,
+    Cs,
+    D,
+    Ds,
+    E,
+    F,
+    Fs,
+    G,
+    Gs,
+    A,
+    As,
+    B,
 }
 
 impl NoteName {
     pub fn as_str(self) -> &'static str {
         match self {
-            NoteName::C  => "C",  NoteName::Cs => "C#",
-            NoteName::D  => "D",  NoteName::Ds => "D#",
-            NoteName::E  => "E",
-            NoteName::F  => "F",  NoteName::Fs => "F#",
-            NoteName::G  => "G",  NoteName::Gs => "G#",
-            NoteName::A  => "A",  NoteName::As => "A#",
-            NoteName::B  => "B",
+            NoteName::C => "C",
+            NoteName::Cs => "C#",
+            NoteName::D => "D",
+            NoteName::Ds => "D#",
+            NoteName::E => "E",
+            NoteName::F => "F",
+            NoteName::Fs => "F#",
+            NoteName::G => "G",
+            NoteName::Gs => "G#",
+            NoteName::A => "A",
+            NoteName::As => "A#",
+            NoteName::B => "B",
         }
     }
 
     fn from_pc(pc: i32) -> Self {
         match pc.rem_euclid(12) {
-            0  => NoteName::C,  1  => NoteName::Cs,
-            2  => NoteName::D,  3  => NoteName::Ds,
-            4  => NoteName::E,
-            5  => NoteName::F,  6  => NoteName::Fs,
-            7  => NoteName::G,  8  => NoteName::Gs,
-            9  => NoteName::A,  10 => NoteName::As,
+            0 => NoteName::C,
+            1 => NoteName::Cs,
+            2 => NoteName::D,
+            3 => NoteName::Ds,
+            4 => NoteName::E,
+            5 => NoteName::F,
+            6 => NoteName::Fs,
+            7 => NoteName::G,
+            8 => NoteName::Gs,
+            9 => NoteName::A,
+            10 => NoteName::As,
             11 => NoteName::B,
-            _  => unreachable!(),
+            _ => unreachable!(),
         }
     }
 }
@@ -95,7 +116,12 @@ impl Pitch {
     pub fn from_hz(hz: f32, confidence: f32, a4_hz: f32) -> Self {
         let note = Note::nearest(hz, a4_hz);
         let cents = 1200.0 * (hz / note.frequency(a4_hz)).log2();
-        Pitch { hz, note, cents, confidence }
+        Pitch {
+            hz,
+            note,
+            cents,
+            confidence,
+        }
     }
 }
 

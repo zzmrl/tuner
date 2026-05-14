@@ -22,7 +22,8 @@ pub fn run(path: &Path, cfg: DetectorConfig, hop: usize) -> Result<()> {
         hound::SampleFormat::Int => {
             let bits = spec.bits_per_sample as i32;
             let scale = 1.0_f32 / (1_i64 << (bits - 1)) as f32;
-            let raw: Vec<f32> = reader.samples::<i32>()
+            let raw: Vec<f32> = reader
+                .samples::<i32>()
                 .filter_map(Result::ok)
                 .map(|s| s as f32 * scale)
                 .collect();
@@ -32,8 +33,13 @@ pub fn run(path: &Path, cfg: DetectorConfig, hop: usize) -> Result<()> {
 
     eprintln!(
         "tuner-cli: {} — {:.1} kHz, {} ch, {} samples ({:.2}s), window={} hop={}",
-        path.display(), sample_rate / 1000.0, channels, mono.len(),
-        mono.len() as f32 / sample_rate, cfg.window_len, hop,
+        path.display(),
+        sample_rate / 1000.0,
+        channels,
+        mono.len(),
+        mono.len() as f32 / sample_rate,
+        cfg.window_len,
+        hop,
     );
 
     if mono.len() < cfg.window_len {
