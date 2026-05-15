@@ -14,7 +14,7 @@ hound = "3.5"
 clap = { version = "4.6", features = ["derive"] }
 anyhow = "1.0"
 cpal = "0.17"
-triple_buffer = "8.1"
+triple_buffer = "9.0"
 
 [profile.release]
 lto = "thin"
