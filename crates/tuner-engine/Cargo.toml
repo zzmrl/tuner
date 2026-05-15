@@ -10,3 +10,6 @@ description = "Host-agnostic tuner engine: ring buffer, smoothing, lock-free pit
 [dependencies]
 tuner-core = { path = "../tuner-core" }
 triple_buffer.workspace = true
+
+[dev-dependencies]
+hound.workspace = true

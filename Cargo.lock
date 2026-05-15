@@ -811,6 +811,7 @@ dependencies = [
 name = "tuner-engine"
 version = "0.1.0"
 dependencies = [
+ "hound",
  "triple_buffer",
  "tuner-core",
 ]
