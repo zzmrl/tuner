@@ -46,7 +46,7 @@ pub fn run(path: &Path, cfg: DetectorConfig, hop: usize) -> Result<()> {
         anyhow::bail!("input is shorter than analysis window");
     }
 
-    let mut det = McLeodDetector::new(cfg.clone());
+    let mut det = McLeodDetector::new(cfg);
     let mut pos = 0;
     while pos + cfg.window_len <= mono.len() {
         let window = &mono[pos..pos + cfg.window_len];

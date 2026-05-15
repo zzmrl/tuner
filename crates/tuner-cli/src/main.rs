@@ -2,8 +2,7 @@
 //!
 //! Two subcommands:
 //!   - `file <path.wav>`  — analyse a WAV file frame-by-frame.
-//!   - `live`             — capture from the default input device and print
-//!                          detections in real time.
+//!   - `live`             — capture from the default input device and print detections in real time.
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
