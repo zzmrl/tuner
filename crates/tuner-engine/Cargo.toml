@@ -8,7 +8,8 @@ rust-version.workspace = true
 description = "Host-agnostic tuner engine: ring buffer, smoothing, lock-free pitch publishing."
 
 [dependencies]
-tuner-core = { path = "../tuner-core" }
+tuner-core.workspace = true
+
 triple_buffer.workspace = true
 
 [dev-dependencies]
