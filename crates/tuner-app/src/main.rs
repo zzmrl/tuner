@@ -79,7 +79,10 @@ impl eframe::App for TunerApp {
             });
 
             ui.add_space(8.0);
-            draw_meter(ui, displayable.map(|p| p.cents));
+            ui.vertical_centered(|ui| {
+                draw_meter(ui, displayable.map(|p| p.cents));
+            });
+            // draw_meter(ui, displayable.map(|p| p.cents));
 
             ui.add_space(12.0);
             ui.vertical_centered(|ui| match displayable {
